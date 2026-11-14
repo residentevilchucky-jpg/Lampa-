@@ -1,0 +1,120 @@
+
+(function () {
+    'use strict';
+
+    if (window.plugin_ptbr_samsung) return;
+    window.plugin_ptbr_samsung = true;
+
+    var KEYWORDS = [
+        'dublado',
+        'dual audio',
+        'pt-br',
+        'ptbr',
+        'português',
+        'portugues',
+        'brazilian',
+        'nacional'
+    ];
+
+    var started = false;
+    var observer = null;
+
+    function isPT(text) {
+        text = (text || '').toLowerCase();
+
+        // Excluir português de Portugal
+        if (text.indexOf('português (portugal)') !== -1 ||
+            text.indexOf('portugues (portugal)') !== -1 ||
+            text.indexOf('pt-pt') !== -1) {
+            return false;
+        }
+
+        for (var i = 0; i < KEYWORDS.length; i++) {
+            if (text.indexOf(KEYWORDS[i]) !== -1) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    function applyLanguage() {
+        try {
+            if (window.Lampa && Lampa.Storage) {
+                Lampa.Storage.set('language', 'pt');
+                Lampa.Storage.set('tmdb_lang', 'pt-BR');
+            }
+        } catch (e) {}
+    }
+
+    function markItem(item) {
+        if (!item || item.getAttribute('data-ptbr')) return;
+
+        var title = item.querySelector('.torrent-item__title');
+
+        if (!title) title = item;
+
+        if (!isPT(title.textContent || title.innerText)) return;
+
+        item.setAttribute('data-ptbr', '1');
+
+        var badge = document.createElement('span');
+        badge.textContent = ' 🇧🇷 PT-BR';
+        badge.style.cssText =
+            'color:#4cd964;font-weight:bold;margin-left:6px;';
+
+        title.appendChild(badge);
+        item.style.borderLeft = '4px solid #4cd964';
+    }
+
+    function scan() {
+        if (!document.body) return;
+
+        var items = document.querySelectorAll('.torrent-item');
+
+        for (var i = 0; i < items.length; i++) {
+            markItem(items[i]);
+        }
+    }
+
+    function watch() {
+        if (window.MutationObserver && document.body) {
+            observer = new MutationObserver(function () {
+                scan();
+            });
+
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true
+            });
+        } else {
+            window.setInterval(scan, 2000);
+        }
+
+        scan();
+    }
+
+    function start() {
+        if (started) return;
+        if (!window.Lampa) return;
+
+        started = true;
+
+        applyLanguage();
+        watch();
+
+        console.log('[PTBR Samsung] Plugin iniciado');
+    }
+
+    if (window.Lampa && Lampa.Listener) {
+        Lampa.Listener.follow('app', function (event) {
+            if (event.type === 'ready') {
+                start();
+            }
+        });
+    }
+
+    // Compatibilidade com carregamento após inicialização
+    window.setTimeout(start, 1500);
+
+})();
