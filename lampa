@@ -1,0 +1,249 @@
+
+(function () {
+    'use strict';
+
+    if (window.BRASIL_FLIX_PTBR) return;
+    window.BRASIL_FLIX_PTBR = true;
+
+    function iniciar() {
+        if (!window.Lampa || !Lampa.Component) return;
+
+        var CSS = `
+        .brasil-flix { padding:20px; color:#fff; }
+        .brasil-flix-head { padding:20px; margin-bottom:20px;
+            background:#20252d; border-radius:12px; }
+        .brasil-flix-title { font-size:27px; font-weight:bold; }
+        .brasil-flix-sub { font-size:14px; opacity:.7; margin-top:8px; }
+        .brasil-flix-tabs { display:flex; flex-wrap:wrap; gap:10px;
+            margin-bottom:20px; }
+        .brasil-flix-tab { padding:12px 22px; background:#292e38;
+            border-radius:8px; }
+        .brasil-flix-tab.active { background:#176b45; }
+        .brasil-flix-grid { display:grid;
+            grid-template-columns:repeat(4,minmax(0,1fr)); gap:15px; }
+        .brasil-flix-card { min-width:0; }
+        .brasil-flix-card img { width:100%; border-radius:9px;
+            aspect-ratio:2/3; object-fit:cover; }
+        .brasil-flix-name { font-size:14px; margin-top:7px; }
+        .brasil-flix-info { opacity:.65; font-size:11px; }
+        .brasil-flix-more { padding:18px; text-align:center;
+            background:#176b45; border-radius:8px; margin:20px 0; }
+        .brasil-flix-msg { padding:25px; text-align:center; }
+        `;
+
+        if (!document.getElementById('brasil-flix-css')) {
+            $('<style id="brasil-flix-css">')
+                .text(CSS).appendTo('head');
+        }
+
+        function Catalogo(object) {
+            var self = this;
+            var activity = object.activity;
+            var request = new Lampa.Reguest();
+            var tipo = 'movie';
+            var pagina = 1;
+            var resultados = [];
+            var html = $('<div class="brasil-flix"></div>');
+
+            function escapar(v) {
+                return String(v || '').replace(/[&<>"']/g,
+                    function(c) {
+                        return {
+                            '&':'&amp;',
+                            '<':'&lt;',
+                            '>':'&gt;',
+                            '"':'&quot;',
+                            "'":'&#39;'
+                        }[c];
+                    });
+            }
+
+            function titulo(item) {
+                return item.title || item.name || 'Sem título';
+            }
+
+            function endereco(item) {
+                return item.poster_path
+                    ? Lampa.TMDB.image(item.poster_path, 'w342')
+                    : '';
+            }
+
+            function abrir(item) {
+                var card = Object.assign({}, item, {
+                    id: item.id,
+                    source: 'tmdb',
+                    method: tipo,
+                    type: tipo,
+                    title: item.title || item.name,
+                    name: item.name || item.title
+                });
+
+                Lampa.Router.call('full', card);
+            }
+
+            function montar() {
+                var nomes = [
+                    ['movie', 'Filmes'],
+                    ['tv', 'Séries'],
+                    ['anime', 'Animes']
+                ];
+
+                var tabs = nomes.map(function(t) {
+                    return '<div class="brasil-flix-tab selector ' +
+                        (tipo === t[0] ? 'active' : '') +
+                        '" data-tipo="' + t[0] + '">' +
+                        t[1] + '</div>';
+                }).join('');
+
+                var cards = resultados.map(function(item, i) {
+                    var poster = endereco(item);
+
+                    return '<div class="brasil-flix-card selector" data-i="' +
+                        i + '">' +
+                        (poster
+                            ? '<img src="' + escapar(poster) + '">'
+                            : '<div>Sem cartaz</div>') +
+                        '<div class="brasil-flix-name">' +
+                        escapar(titulo(item)) + '</div>' +
+                        '<div class="brasil-flix-info">' +
+                        (item.release_date || item.first_air_date || '') +
+                        '</div></div>';
+                }).join('');
+
+                html.html(
+                    '<div class="brasil-flix-head">' +
+                    '<div class="brasil-flix-title">BRASIL FLIX</div>' +
+                    '<div class="brasil-flix-sub">' +
+                    'Catálogo em português brasileiro</div></div>' +
+                    '<div class="brasil-flix-tabs">' + tabs + '</div>' +
+                    '<div class="brasil-flix-grid">' + cards + '</div>' +
+                    '<div class="brasil-flix-more selector">' +
+                    'Carregar mais</div>' +
+                    '<div class="brasil-flix-msg">' +
+                    'Idioma das informações: português brasileiro. ' +
+                    'A dublagem precisa ser confirmada na fonte de reprodução.' +
+                    '</div>'
+                );
+
+                html.find('.brasil-flix-tab').on('hover:enter',
+                    function() {
+                        tipo = $(this).data('tipo');
+                        pagina = 1;
+                        resultados = [];
+                        carregar();
+                    }
+                );
+
+                html.find('.brasil-flix-card').on('hover:enter',
+                    function() {
+                        var item = resultados[
+                            Number($(this).data('i'))
+                        ];
+                        if (item) abrir(item);
+                    }
+                );
+
+                html.find('.brasil-flix-more').on('hover:enter',
+                    function() {
+                        pagina++;
+                        carregar(true);
+                    }
+                );
+            }
+
+            function carregar(mais) {
+                var caminho;
+
+                if (tipo === 'anime') {
+                    caminho = 'discover/tv?language=pt-BR' +
+                        '&with_genres=16&with_original_language=ja';
+                } else {
+                    caminho = 'discover/' + tipo +
+                        '?language=pt-BR&region=BR' +
+                        '&sort_by=popularity.desc';
+                }
+
+                caminho += '&page=' + pagina;
+
+                if (activity && activity.loader) {
+                    activity.loader(true);
+                }
+
+                request.get(
+                    Lampa.TMDB.api(caminho),
+                    function(data) {
+                        if (activity && activity.loader) {
+                            activity.loader(false);
+                        }
+
+                        var lista = data && data.results
+                            ? data.results : [];
+
+                        if (!mais) resultados = [];
+
+                        resultados = resultados.concat(lista);
+                        montar();
+                    },
+                    function() {
+                        if (activity && activity.loader) {
+                            activity.loader(false);
+                        }
+
+                        html.find('.brasil-flix-grid').html(
+                            '<div class="brasil-flix-msg">' +
+                            'Não foi possível carregar o catálogo. ' +
+                            'Tente novamente.</div>'
+                        );
+                    }
+                );
+            }
+
+            this.create = function() {
+                montar();
+                carregar();
+                return html;
+            };
+
+            this.render = function() {
+                return html;
+            };
+
+            this.destroy = function() {
+                request.clear();
+                html.remove();
+            };
+        }
+
+        if (!Lampa.Component.get('brasil_flix')) {
+            Lampa.Component.add('brasil_flix', Catalogo);
+        }
+
+        if (!$('.brasil-flix-menu').length) {
+            var menu = $(
+                '<li class="menu__item selector brasil-flix-menu">' +
+                '<div class="menu__text">BRASIL FLIX PT-BR</div></li>'
+            );
+
+            menu.on('hover:enter', function() {
+                Lampa.Activity.push({
+                    url: '',
+                    title: 'BRASIL FLIX PT-BR',
+                    component: 'brasil_flix',
+                    page: 1
+                });
+            });
+
+            $('.menu .menu__list').eq(0).append(menu);
+        }
+
+        console.log('BRASIL FLIX PT-BR iniciado');
+    }
+
+    if (window.appready) {
+        iniciar();
+    } else if (window.Lampa && Lampa.Listener) {
+        Lampa.Listener.follow('app', function(e) {
+            if (e.type === 'ready') iniciar();
+        });
+    }
+})();
